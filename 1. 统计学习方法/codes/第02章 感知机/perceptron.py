@@ -3,7 +3,6 @@ test_perceptron.py
 
 实现感知机算法（原始形式），用于二分类任务。
 
-Author: Huang CQ
 Date: 2026-01-16
 """
 import numpy as np

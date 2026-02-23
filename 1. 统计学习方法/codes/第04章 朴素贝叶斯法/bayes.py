@@ -8,7 +8,6 @@ bayes.py
 - 采用拉普拉斯平滑（Laplace smoothing）避免零概率问题
 - 假设特征（词）之间相互独立
 
-Author: Huang CQ
 Date: 2026-01-26
 """
 import numpy as np

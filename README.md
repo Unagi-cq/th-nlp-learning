@@ -2,7 +2,7 @@
 
 <div align="center">
 
-[![Python](https://img.shields.io/badge/python-3.7+-blue.svg)](https://www.python.org/downloads/)
+[![Python](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 
 </div>
 
@@ -29,6 +29,12 @@ th-nlp-learning/
 - 📚 系统化的学习路线
 - 🔥 最新AI技术动态
 - 💡 实用编程技巧
+
+<div align="center">
+
+![三黄工作室二维码](images/qr_code.png)
+
+</div>
 
 ## 📄 许可证
 
