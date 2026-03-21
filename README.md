@@ -52,6 +52,7 @@ th-nlp-learning/
 | 第04章 | 朴素贝叶斯法 | ✅ | 多项式模型，拉普拉斯平滑 |
 | 第05章 | 决策树 | ✅ | ID3（信息增益）、C4.5（信息增益率）、CART（基尼指数） |
 | 第06章 | 逻辑斯蒂回归与最大熵模型 | ✅ | 二分类、多分类模型（手写+sklearn对比） |
+| 第07章 | 支持向量机 | ✅ | 线性SVM（原始形式）、非线性SVM（RBF/多项式/Sigmoid核） |
 | - | - | 🚧 | 努力更新中... |
 
 ## 🔧 运行方式
@@ -77,6 +78,20 @@ uv run python use_models.py
 
 # sklearn 官方 API 测试
 uv run python use_sklearn.py
+```
+
+### 第07章 支持向量机
+
+```bash
+# 线性SVM（cvxopt实现）
+cd "1. 统计学习方法\codes\第07章 支持向量机"
+uv run python models/svm_linear.py
+
+# 线性SVM（sklearn实现）
+uv run python models/svm_linear_sklearn.py
+
+# 非线性SVM（多核函数对比）
+uv run python models/svm_nonlinear.py
 ```
 
 ## 💻 环境要求
