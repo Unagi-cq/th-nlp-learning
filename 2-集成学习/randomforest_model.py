@@ -17,7 +17,7 @@ DATASETS = {
     },
 }
 
-N_ESTIMATORS_GRID = [50, 100, 200, 300, 500]
+N_ESTIMATORS_GRID = [50, 100, 200, 250]
 MAX_DEPTH_GRID = [3, 5, 7, 10, None]
 
 FIGURES_DIR = Path(__file__).parent / "figures"
