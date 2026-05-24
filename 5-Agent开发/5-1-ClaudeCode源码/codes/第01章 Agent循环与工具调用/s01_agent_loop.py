@@ -20,17 +20,19 @@ from anthropic import Anthropic
 from dotenv import load_dotenv
 from loguru import logger
 
-# 从 codes/ 目录的 .env 文件加载配置（脚本所在章节目录的上一级）
+# ########## 模型与日志配置
 _env_path = Path(__file__).resolve().parent.parent / ".env"
 load_dotenv(_env_path, override=True)
 
-logger.add("agent_loop.log", rotation="5 MB", encoding="utf-8", level="DEBUG")
+logger.add("../app.log", rotation="5 MB", encoding="utf-8", level="DEBUG")
 
 client = Anthropic(
     base_url=os.getenv("API_BASE_URL"),
     api_key=os.getenv("API_KEY"),
 )
 MODEL = os.getenv("MODEL_NAME")
+
+# ########## 系统提示词与工具配置
 SYSTEM = (
     f"You are a coding agent at {os.getcwd()}. "
     "Use bash to inspect and change the workspace. Act first, then report clearly."
@@ -121,8 +123,8 @@ def run_one_turn(state: LoopState) -> bool:
         tools=TOOLS,
         max_tokens=8000,
     )
-    logger.debug("模型输入：{}", state.messages)
-    logger.debug("模型响应: {}", response.to_json())
+    logger.debug("模型输入：\n{}", state.messages)
+    logger.debug("模型响应: \n{}", response.to_json())
     state.messages.append({"role": "assistant", "content": response.content})
 
     if response.stop_reason != "tool_use":
@@ -151,7 +153,7 @@ if __name__ == "__main__":
     history = []
     while True:
         try:
-            query = input("\033[36ms01 >> \033[0m")
+            query = input("s01 >>")
         except (EOFError, KeyboardInterrupt):
             logger.info("用户中断，程序退出")
             break
@@ -159,9 +161,11 @@ if __name__ == "__main__":
             logger.info("用户退出")
             break
         logger.info("用户输入: {}", query)
+
         history.append({"role": "user", "content": query})
         state = LoopState(messages=history)
         agent_loop(state)
+
         final_text = extract_text(history[-1]["content"])
         if final_text:
             print(final_text)
