@@ -16,4 +16,5 @@ dependencies = [
     "scikit-learn>=1.8.0",
     "xgboost>=3.2.0",
     "jsons>=1.6.3",
+    "logger>=1.4",
 ]
