@@ -1,2 +1,4 @@
 .idea/
 __pycache__/
+/5-Agent开发/5-1-ClaudeCode源码/codes/.env
+/5-Agent开发/5-1-ClaudeCode源码/codes/app.log
