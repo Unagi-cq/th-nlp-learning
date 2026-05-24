@@ -1,15 +1,19 @@
 #!/usr/bin/env python3
 """
-s02_tool_use.py - 工具分发 + 消息规范化
+s03_todo_write.py - 会话计划与 TodoWrite
 
-1. 扩展工具分发表（bash / read_file / write_file / edit_file）
-2. 新增 normalize_messages() 在每次 API 调用前清理消息列表
+本章引入轻量级会话计划机制（非持久化任务图）。
+模型可以重写当前计划、聚焦一个活跃步骤，
+若多轮未刷新计划则会收到提醒。
 """
 from config import client, MODEL
 from loguru import logger
-from tools import TOOLS, TOOL_HANDLERS, WORKDIR
+from tools import TOOLS, TOOL_HANDLERS, WORKDIR, TODO
 
-SYSTEM = f"You are a coding agent at {WORKDIR}. Use tools to solve tasks. Act, don't explain."
+SYSTEM = f"""You are a coding agent at {WORKDIR}.
+Use the todo tool for multi-step work.
+Keep exactly one step in_progress when a task has multiple steps.
+Refresh the plan as work advances. Prefer tools over prose."""
 
 
 def _block_to_dict(block) -> dict | None:
@@ -110,6 +114,7 @@ def agent_loop(messages: list):
             return
 
         results = []
+        used_todo = False
         for block in response.content:
             if block.type == "tool_use":
                 handler = TOOL_HANDLERS.get(block.name)
@@ -122,6 +127,16 @@ def agent_loop(messages: list):
                 logger.info(f"> {block.name}:")
                 logger.info(output[:200])
                 results.append({"type": "tool_result", "tool_use_id": block.id, "content": output})
+                if block.name == "todo":
+                    used_todo = True
+
+        if used_todo:
+            TODO.state.rounds_since_update = 0
+        else:
+            TODO.note_round_without_update()
+            reminder = TODO.reminder()
+            if reminder:
+                results.insert(0, {"type": "text", "text": reminder})
         messages.append({"role": "user", "content": results})
 
 
@@ -129,7 +144,7 @@ if __name__ == "__main__":
     history = []
     while True:
         try:
-            query = input("s02 >> ")
+            query = input(">> ")
         except (EOFError, KeyboardInterrupt):
             logger.info("用户中断，程序退出")
             break
