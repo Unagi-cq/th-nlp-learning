@@ -29,16 +29,16 @@ def run_bash(command: str) -> str:
     """执行 shell 命令，拦截危险操作"""
     dangerous = ["rm -rf /", "sudo", "shutdown", "reboot", "> /dev/"]
     if any(d in command for d in dangerous):
-        logger.warning("危险命令已拦截: {}", command)
+        logger.warning("[bash] 危险命令已拦截: {}", command)
         return "Error: Dangerous command blocked"
     try:
         r = subprocess.run(command, shell=True, cwd=WORKDIR,
                            capture_output=True, text=True, timeout=120)
         out = (r.stdout + r.stderr).strip()
-        logger.debug("bash 执行完成: {} | 返回码: {} | 输出长度: {}", command, r.returncode, len(out))
+        logger.debug("[bash] {} → 返回码={} 输出={}字节", command[:60], r.returncode, len(out))
         return out[:50000] if out else "(no output)"
     except subprocess.TimeoutExpired:
-        logger.error("命令超时 (120s): {}", command)
+        logger.error("[bash] 超时 (120s): {}", command[:60])
         return "Error: Timeout (120s)"
 
 
@@ -47,12 +47,13 @@ def run_read(path: str, limit: int = None) -> str:
     try:
         text = safe_path(path).read_text()
         lines = text.splitlines()
-        if limit and limit < len(lines):
-            lines = lines[:limit] + [f"... ({len(lines) - limit} more lines)"]
-        logger.debug("读取文件: {} | 总行数: {}", path, len(text.splitlines()))
+        total = len(lines)
+        if limit and limit < total:
+            lines = lines[:limit] + [f"... ({total - limit} more lines)"]
+        logger.debug("[read] {} ({} 行)", path, total)
         return "\n".join(lines)[:50000]
     except Exception as e:
-        logger.error("读取文件失败: {} | 错误: {}", path, e)
+        logger.error("[read] {} | {}", path, e)
         return f"Error: {e}"
 
 
@@ -62,10 +63,10 @@ def run_write(path: str, content: str) -> str:
         fp = safe_path(path)
         fp.parent.mkdir(parents=True, exist_ok=True)
         fp.write_text(content)
-        logger.info("写入文件: {} | 字节数: {}", path, len(content))
+        logger.info("[write] {} ({} 字节)", path, len(content))
         return f"Wrote {len(content)} bytes to {path}"
     except Exception as e:
-        logger.error("写入文件失败: {} | 错误: {}", path, e)
+        logger.error("[write] {} | {}", path, e)
         return f"Error: {e}"
 
 
@@ -75,13 +76,13 @@ def run_edit(path: str, old_text: str, new_text: str) -> str:
         fp = safe_path(path)
         content = fp.read_text()
         if old_text not in content:
-            logger.warning("编辑失败，未找到目标文本: {} | old_text={!r}", path, old_text[:80])
+            logger.warning("[edit] 未找到目标文本: {}", path)
             return f"Error: Text not found in {path}"
         fp.write_text(content.replace(old_text, new_text, 1))
-        logger.info("编辑文件: {}", path)
+        logger.info("[edit] {}", path)
         return f"Edited {path}"
     except Exception as e:
-        logger.error("编辑文件失败: {} | 错误: {}", path, e)
+        logger.error("[edit] {} | {}", path, e)
         return f"Error: {e}"
 
 # ===========================================
@@ -134,7 +135,7 @@ class TodoManager:
             raise ValueError("Only one plan item can be in_progress")
         self.state.items = normalized
         self.state.rounds_since_update = 0
-        logger.info("计划已更新，共 {} 项", len(normalized))
+        logger.info("[todo] 计划已更新 ({} 项)", len(normalized))
         return self.render()
 
     def note_round_without_update(self) -> None:
@@ -147,7 +148,7 @@ class TodoManager:
             return None
         if self.state.rounds_since_update < PLAN_REMINDER_INTERVAL:
             return None
-        logger.debug("触发计划刷新提醒（已 {} 轮未更新）", self.state.rounds_since_update)
+        logger.debug("[todo] 提醒触发 (已 {} 轮未更新)", self.state.rounds_since_update)
         return "<reminder>Refresh your current plan before continuing.</reminder>"
 
     def render(self) -> str:
