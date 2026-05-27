@@ -3,8 +3,8 @@ from loguru import logger
 from tools import TOOLS, TOOL_HANDLERS, WORKDIR
 import display
 
-# 子代理不需要 plan(todo) 和 task 工具
-SUBAGENT_TOOLS = [t for t in TOOLS if t["name"] not in {"todo", "task"}]
+# 子代理不需要 plan task compact
+SUBAGENT_TOOLS = [t for t in TOOLS if t["name"] not in {"todo", "task", "compact"}]
 
 SUBAGENT_SYSTEM = f"You are a coding subagent at {WORKDIR}. Complete the given task, then summarize your findings."
 

@@ -8,21 +8,16 @@ SP = " " * INDENT
 
 def banner(model: str, workdir: str, skill_count: int = 0, skill_names: str = ""):
     print(f"+{'=' * WIDTH}+")
-    print(f"|  Agent Ready" + " " * (WIDTH - 13) + "|")
-    print(f"|  cwd: {workdir}" + " " * max(1, WIDTH - len(str(workdir)) - 7) + "|")
-    print(f"|  model: {model}" + " " * max(1, WIDTH - len(model) - 9) + "|")
+    print(f"|  Agent Ready")
+    print(f"|  cwd: {workdir}")
+    print(f"|  model: {model}")
     if skill_count:
-        msg = f"skills ({skill_count}): {skill_names}"
-        print(f"|  {msg}" + " " * max(1, WIDTH - len(msg) - 3) + "|")
+        print(f"|  skills ({skill_count}): {skill_names}")
     print(f"+{'=' * WIDTH}+")
 
 
 def user_prompt():
     return input(f"\n> ")
-
-
-def goodbye():
-    print(f"Bye!")
 
 
 def turn_header(n: int):

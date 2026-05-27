@@ -188,6 +188,7 @@ TOOL_HANDLERS = {
     "edit_file": lambda **kw: run_edit(kw["path"], kw["old_text"], kw["new_text"]),
     "todo": lambda **kw: TODO.update(kw["items"]),
     "load_skill": lambda **kw: SKILL_REGISTRY.load_full_text(kw["name"]),
+    "compact": lambda **kw: "Compacting conversation...",
 }
 
 # 工具 Schema 定义（供 API 调用）
@@ -288,6 +289,19 @@ TOOLS = [
             "type": "object",
             "properties": {"name": {"type": "string"}},
             "required": ["name"],
+        },
+    },
+    {
+        "name": "compact",
+        "description": "Summarize earlier conversation so work can continue in a smaller context.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "focus": {
+                    "type": "string",
+                    "description": "Optional focus hint to preserve in the summary.",
+                },
+            },
         },
     },
 ]

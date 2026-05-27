@@ -8,6 +8,7 @@ from tools import TOOLS, TOOL_HANDLERS, WORKDIR, TODO
 from subagent import run_subagent
 from skills import SKILL_REGISTRY
 import display
+import compact
 
 SYSTEM = f"""You are a coding agent at {WORKDIR}.
 
@@ -80,11 +81,20 @@ def normalize_messages(messages: list) -> list:
     return merged
 
 
-def agent_loop(messages: list):
+def agent_loop(messages: list, state: compact.CompactState):
     turn = 0
     while True:
         turn += 1
         display.turn_header(turn)
+
+        # 微压缩：截断旧的工具结果
+        messages[:] = compact.micro_compact(messages)
+
+        # 自动压缩：上下文超限时触发
+        if compact.estimate_context_size(messages) > compact.CONTEXT_LIMIT:
+            logger.info("[auto compact] 上下文超限，触发自动压缩")
+            display.tool("auto-compact", {})
+            messages[:] = compact.compact_history(messages, state)
 
         response = client.messages.create(
             model=MODEL,
@@ -106,6 +116,8 @@ def agent_loop(messages: list):
 
         results = []
         used_todo = False
+        manual_compact = False
+        compact_focus = None
         for block in response.content:
             if block.type == "tool_use":
                 params = dict(block.input) if block.input else {}
@@ -121,6 +133,12 @@ def agent_loop(messages: list):
                     display.plan(output)
                     used_todo = True
 
+                elif block.name == "compact":
+                    manual_compact = True
+                    compact_focus = params.get("focus")
+                    output = "Compacting conversation..."
+                    display.tool("compact", params)
+
                 else:
                     handler = TOOL_HANDLERS.get(block.name)
                     if handler:
@@ -128,6 +146,11 @@ def agent_loop(messages: list):
                     else:
                         logger.warning("未知工具: {}", block.name)
                         output = f"Unknown tool: {block.name}"
+                    # 大输出持久化到磁盘
+                    output = compact.persist_large_output(block.id, output)
+                    # 记录最近读取的文件
+                    if block.name == "read_file":
+                        compact.track_recent_file(state, params.get("path", ""))
                     display.tool(block.name, params)
                     display.tool_output(output)
 
@@ -142,21 +165,19 @@ def agent_loop(messages: list):
                 results.insert(0, {"type": "text", "text": reminder})
         messages.append({"role": "user", "content": results})
 
+        # 手动压缩：本轮工具调用完成后执行
+        if manual_compact:
+            logger.info("[manual compact] 手动触发压缩")
+            messages[:] = compact.compact_history(messages, state, focus=compact_focus)
 
 if __name__ == "__main__":
     display.banner(MODEL, str(WORKDIR), SKILL_REGISTRY.count, SKILL_REGISTRY.names)
 
     history = []
+    compact_state = compact.CompactState()
     while True:
-        try:
-            query = display.user_prompt()
-        except (EOFError, KeyboardInterrupt):
-            display.goodbye()
-            break
-        if query.strip().lower() in ("q", "exit", ""):
-            display.goodbye()
-            break
-
+        query = display.user_prompt()
         logger.info("用户输入: {}", query)
+
         history.append({"role": "user", "content": query})
-        agent_loop(history)
+        agent_loop(history, compact_state)
