@@ -137,3 +137,24 @@ def compact_history(messages: list, state: CompactState, focus: str | None = Non
             f"{summary}"
         ),
     }]
+
+
+TOOL_HANDLERS = {
+    "compact": lambda **kw: "Compacting conversation...",
+}
+
+TOOLS = [
+    {
+        "name": "compact",
+        "description": "Summarize earlier conversation so work can continue in a smaller context.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "focus": {
+                    "type": "string",
+                    "description": "Optional focus hint to preserve in the summary.",
+                },
+            },
+        },
+    },
+]

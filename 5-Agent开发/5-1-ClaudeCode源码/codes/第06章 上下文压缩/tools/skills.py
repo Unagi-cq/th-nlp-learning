@@ -1,9 +1,12 @@
+"""
+skills.py - 技能注册与加载
+"""
 import re
 from dataclasses import dataclass
 from pathlib import Path
 
 WORKDIR = Path.cwd()
-SKILLS_DIR = WORKDIR / "skills"
+SKILLS_DIR = WORKDIR / "skill-files"
 
 
 @dataclass
@@ -75,4 +78,21 @@ class SkillRegistry:
             "</skill>"
         )
 
+
 SKILL_REGISTRY = SkillRegistry(SKILLS_DIR)
+
+TOOL_HANDLERS = {
+    "load_skill": lambda **kw: SKILL_REGISTRY.load_full_text(kw["name"]),
+}
+
+TOOLS = [
+    {
+        "name": "load_skill",
+        "description": "Load the full body of a named skill into the current context.",
+        "input_schema": {
+            "type": "object",
+            "properties": {"name": {"type": "string"}},
+            "required": ["name"],
+        },
+    },
+]

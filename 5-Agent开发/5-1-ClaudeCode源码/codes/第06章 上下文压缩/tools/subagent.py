@@ -1,10 +1,20 @@
+"""
+subagent.py - 子代理：独立上下文执行任务
+"""
 from config import client, MODEL
 from loguru import logger
-from tools import TOOLS, TOOL_HANDLERS, WORKDIR
+from .file import TOOLS as _F_TOOLS, TOOL_HANDLERS as _F_HANDLERS, WORKDIR
+from .plan import TOOLS as _P_TOOLS, TOOL_HANDLERS as _P_HANDLERS
+from .skills import TOOLS as _S_TOOLS, TOOL_HANDLERS as _S_HANDLERS
+from .compact import TOOLS as _C_TOOLS, TOOL_HANDLERS as _C_HANDLERS
 import display
 
+ALL_TOOLS = _F_TOOLS + _P_TOOLS + _S_TOOLS + _C_TOOLS
+ALL_HANDLERS = {**_F_HANDLERS, **_P_HANDLERS, **_S_HANDLERS, **_C_HANDLERS}
+
 # 子代理不需要 plan task compact
-SUBAGENT_TOOLS = [t for t in TOOLS if t["name"] not in {"todo", "task", "compact"}]
+SUBAGENT_TOOLS = [t for t in ALL_TOOLS if t["name"] not in {"todo", "task", "compact"}]
+SUBAGENT_HANDLERS = {k: v for k, v in ALL_HANDLERS.items() if k not in {"todo", "compact"}}
 
 SUBAGENT_SYSTEM = f"You are a coding subagent at {WORKDIR}. Complete the given task, then summarize your findings."
 
@@ -32,7 +42,7 @@ def run_subagent(desc: str, prompt: str) -> str:
         results = []
         for block in response.content:
             if block.type == "tool_use":
-                handler = TOOL_HANDLERS.get(block.name)
+                handler = SUBAGENT_HANDLERS.get(block.name)
                 params = dict(block.input) if block.input else {}
                 param_str = ", ".join(f"{k}={str(v)[:40]}" for k, v in params.items())
                 logger.debug("[子代理] {}({})", block.name, param_str)
@@ -44,3 +54,26 @@ def run_subagent(desc: str, prompt: str) -> str:
         sub_messages.append({"role": "user", "content": results})
 
     return "(subagent hit turn limit)"
+
+
+TOOL_HANDLERS = {
+    "task": lambda **kw: run_subagent(kw.get("description", "subtask"), kw["prompt"]),
+}
+
+TOOLS = [
+    {
+        "name": "task",
+        "description": "Spawn a subagent with fresh context. It shares the filesystem but not conversation history.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "prompt": {"type": "string"},
+                "description": {
+                    "type": "string",
+                    "description": "Short description of the task"
+                }
+            },
+            "required": ["prompt"]
+        }
+    },
+]

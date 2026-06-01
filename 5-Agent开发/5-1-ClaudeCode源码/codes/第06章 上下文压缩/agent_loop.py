@@ -4,11 +4,8 @@ s06_context_compact.py - 上下文压缩
 """
 from config import client, MODEL
 from loguru import logger
-from tools import TOOLS, TOOL_HANDLERS, WORKDIR, TODO
-from subagent import run_subagent
-from skills import SKILL_REGISTRY
-import display
-from compact import (
+from tools import TOOLS, TOOL_HANDLERS, TODO, run_subagent
+from tools import (
     CompactState,
     CONTEXT_LIMIT,
     micro_compact,
@@ -17,17 +14,10 @@ from compact import (
     persist_large_output,
     track_recent_file,
 )
+import display
+from prompt import load_system_prompt
 
-SYSTEM = f"""You are a coding agent at {WORKDIR}.
-
-- Use tools to solve tasks. Act, don't explain.
-- Use the todo tool for multi-step work. Keep exactly one step in_progress when a task has multiple steps. Refresh the plan as work advances. Prefer tools over prose.
-- Use the task tool to delegate exploration or subtasks.
-- Keep working step by step, and use compact if the conversation gets too long.
-- Use load_skill when a task needs specialized instructions before you act.
-Skills available:
-{SKILL_REGISTRY.describe_available()}
-"""
+SYSTEM = load_system_prompt()
 
 
 def _block_to_dict(block) -> dict | None:
@@ -179,6 +169,7 @@ def agent_loop(messages: list, state: CompactState):
             messages[:] = compact_history(messages, state, focus=compact_focus)
 
 if __name__ == "__main__":
+    from tools import WORKDIR, SKILL_REGISTRY
     display.banner(MODEL, str(WORKDIR), SKILL_REGISTRY.count, SKILL_REGISTRY.names)
 
     history = []
