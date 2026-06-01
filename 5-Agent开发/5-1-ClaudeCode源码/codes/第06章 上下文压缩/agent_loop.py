@@ -17,86 +17,34 @@ from tools import (
 import display
 from prompt import load_system_prompt
 
-SYSTEM = load_system_prompt()
-
-
-def _block_to_dict(block) -> dict | None:
-    if isinstance(block, dict):
-        return {k: v for k, v in block.items() if not k.startswith("_")}
-    if hasattr(block, "model_dump"):
-        return block.model_dump()
-    if hasattr(block, "to_dict"):
-        return block.to_dict()
-    return None
-
-
-def normalize_messages(messages: list) -> list:
-    cleaned = []
-    for msg in messages:
-        clean = {"role": msg["role"]}
-        if isinstance(msg.get("content"), str):
-            clean["content"] = msg["content"]
-        elif isinstance(msg.get("content"), list):
-            blocks = []
-            for block in msg["content"]:
-                converted = _block_to_dict(block)
-                if converted:
-                    blocks.append(converted)
-            clean["content"] = blocks
-        else:
-            clean["content"] = msg.get("content", "")
-        cleaned.append(clean)
-
-    existing_results = set()
-    for msg in cleaned:
-        if isinstance(msg.get("content"), list):
-            for block in msg["content"]:
-                if isinstance(block, dict) and block.get("type") == "tool_result":
-                    existing_results.add(block.get("tool_use_id"))
-
-    for msg in cleaned:
-        if msg["role"] != "assistant" or not isinstance(msg.get("content"), list):
-            continue
-        for block in msg["content"]:
-            if isinstance(block, dict) and block.get("type") == "tool_use" and block.get("id") not in existing_results:
-                cleaned.append({"role": "user", "content": [
-                    {"type": "tool_result", "tool_use_id": block["id"], "content": "(cancelled)"}
-                ]})
-
-    if not cleaned:
-        return cleaned
-    merged = [cleaned[0]]
-    for msg in cleaned[1:]:
-        if msg["role"] == merged[-1]["role"]:
-            prev = merged[-1]
-            prev_c = prev["content"] if isinstance(prev["content"], list) \
-                else [{"type": "text", "text": str(prev["content"])}]
-            curr_c = msg["content"] if isinstance(msg["content"], list) \
-                else [{"type": "text", "text": str(msg["content"])}]
-            prev["content"] = prev_c + curr_c
-        else:
-            merged.append(msg)
-    return merged
+from utils import normalize_messages
 
 
 def agent_loop(messages: list, state: CompactState):
+    system = load_system_prompt()
+    # 记录本轮开始位置，micro_compact 只处理本轮新增的工具结果
+    cursor = len(messages)
     turn = 0
     while True:
         turn += 1
         display.turn_header(turn)
 
-        # 微压缩：截断旧的工具结果
-        messages[:] = micro_compact(messages)
+        # 微压缩：只截断本轮新增的旧工具结果，不动历史对话
+        if len(messages) > cursor:
+            before = messages[:cursor]
+            after = micro_compact(messages[cursor:])
+            messages[:] = before + after
 
         # 自动压缩：上下文超限时触发
         if estimate_context_size(messages) > CONTEXT_LIMIT:
             logger.info("[auto compact] 上下文超限，触发自动压缩")
             display.tool("auto-compact", {})
             messages[:] = compact_history(messages, state)
+            cursor = 0
 
         response = client.messages.create(
             model=MODEL,
-            system=SYSTEM,
+            system=system,
             messages=normalize_messages(messages),
             tools=TOOLS,
             max_tokens=8000
@@ -117,7 +65,11 @@ def agent_loop(messages: list, state: CompactState):
         manual_compact = False
         compact_focus = None
         for block in response.content:
-            if block.type == "tool_use":
+            if block.type == "thinking":
+                display.thinking(block.thinking)
+            elif block.type == "text":
+                display.agent_text(block.text)
+            elif block.type == "tool_use":
                 params = dict(block.input) if block.input else {}
 
                 if block.name == "task":
@@ -144,9 +96,7 @@ def agent_loop(messages: list, state: CompactState):
                     else:
                         logger.warning("未知工具: {}", block.name)
                         output = f"Unknown tool: {block.name}"
-                    # 大输出持久化到磁盘
                     output = persist_large_output(block.id, output)
-                    # 记录最近读取的文件
                     if block.name == "read_file":
                         track_recent_file(state, params.get("path", ""))
                     display.tool(block.name, params)
@@ -163,10 +113,10 @@ def agent_loop(messages: list, state: CompactState):
                 results.insert(0, {"type": "text", "text": reminder})
         messages.append({"role": "user", "content": results})
 
-        # 手动压缩：本轮工具调用完成后执行
         if manual_compact:
             logger.info("[manual compact] 手动触发压缩")
             messages[:] = compact_history(messages, state, focus=compact_focus)
+            cursor = 0
 
 if __name__ == "__main__":
     from tools import WORKDIR, SKILL_REGISTRY

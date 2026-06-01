@@ -15,7 +15,7 @@ import display
 WORKDIR = Path.cwd()
 
 CONTEXT_LIMIT = 50000
-KEEP_RECENT_TOOL_RESULTS = 3
+KEEP_RECENT_TOOL_RESULTS = 8
 PERSIST_THRESHOLD = 30000
 PREVIEW_CHARS = 2000
 TRANSCRIPT_DIR = WORKDIR / ".transcripts"
@@ -61,6 +61,7 @@ def persist_large_output(tool_use_id: str, output: str) -> str:
 
 
 def collect_tool_result_blocks(messages: list) -> list[tuple[int, int, dict]]:
+    """统计工具调用块"""
     blocks = []
     for message_index, message in enumerate(messages):
         content = message.get("content")
@@ -73,6 +74,7 @@ def collect_tool_result_blocks(messages: list) -> list[tuple[int, int, dict]]:
 
 
 def micro_compact(messages: list) -> list:
+    """当工具调用比较多的时候 直接硬编码来压缩"""
     tool_results = collect_tool_result_blocks(messages)
     if len(tool_results) <= KEEP_RECENT_TOOL_RESULTS:
         return messages
@@ -87,9 +89,9 @@ def micro_compact(messages: list) -> list:
 def write_transcript(messages: list) -> Path:
     TRANSCRIPT_DIR.mkdir(parents=True, exist_ok=True)
     path = TRANSCRIPT_DIR / f"transcript_{int(time.time())}.jsonl"
-    with path.open("w") as handle:
+    with path.open("w", encoding="utf-8") as handle:
         for message in messages:
-            handle.write(json.dumps(message, default=str) + "\n")
+            handle.write(json.dumps(message, default=str, ensure_ascii=False) + "\n")
     return path
 
 
@@ -111,7 +113,8 @@ def summarize_history(messages: list) -> str:
         messages=[{"role": "user", "content": prompt}],
         max_tokens=2000,
     )
-    return response.content[0].text.strip()
+    text = "".join(b.text for b in response.content if hasattr(b, "text"))
+    return text.strip()
 
 
 def compact_history(messages: list, state: CompactState, focus: str | None = None) -> list:

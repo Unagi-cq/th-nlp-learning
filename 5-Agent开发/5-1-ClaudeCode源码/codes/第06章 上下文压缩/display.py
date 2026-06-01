@@ -51,6 +51,11 @@ def subagent_done(turns: int, summary: str):
     print(f"{SP}    done ({turns} turns) -> {_trunc(summary, 120)}")
 
 
+def thinking(text: str):
+    for line in text.split("\n"):
+        print(f"{SP}[思考] {line}")
+
+
 def agent_text(text: str):
     for line in text.split("\n"):
         print(f"{SP}{line}")
