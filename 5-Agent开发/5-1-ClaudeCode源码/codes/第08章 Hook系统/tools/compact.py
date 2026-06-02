@@ -1,0 +1,169 @@
+"""
+compact.py - 上下文压缩模块
+负责微压缩（截断旧工具结果）、自动压缩（上下文超限时总结对话）、手动压缩
+"""
+import json
+import time
+from dataclasses import dataclass, field
+from pathlib import Path
+
+from loguru import logger
+
+from config import client, MODEL
+import display
+
+WORKDIR = Path.cwd()
+
+CONTEXT_LIMIT = 50000
+
+# 一轮对话中最多保留的工具调用结果数量 早期的结果会被强制写为占位字符
+KEEP_RECENT_TOOL_RESULTS = 8
+
+PERSIST_THRESHOLD = 30000
+PREVIEW_CHARS = 2000
+TRANSCRIPT_DIR = WORKDIR / ".transcripts"
+TOOL_RESULTS_DIR = WORKDIR / ".task_outputs" / "tool-results"
+
+
+@dataclass
+class CompactState:
+    has_compacted: bool = False
+    last_summary: str = ""
+    recent_files: list[str] = field(default_factory=list)
+
+
+def estimate_context_size(messages: list) -> int:
+    return len(str(messages))
+
+
+def track_recent_file(state: CompactState, path: str) -> None:
+    if path in state.recent_files:
+        state.recent_files.remove(path)
+    state.recent_files.append(path)
+    if len(state.recent_files) > 5:
+        state.recent_files[:] = state.recent_files[-5:]
+
+
+def persist_large_output(tool_use_id: str, output: str) -> str:
+    if len(output) <= PERSIST_THRESHOLD:
+        return output
+    TOOL_RESULTS_DIR.mkdir(parents=True, exist_ok=True)
+    stored_path = TOOL_RESULTS_DIR / f"{tool_use_id}.txt"
+    if not stored_path.exists():
+        stored_path.write_text(output)
+    preview = output[:PREVIEW_CHARS]
+    rel_path = stored_path.relative_to(WORKDIR)
+    logger.debug("[compact] 大输出已持久化: {}", rel_path)
+    return (
+        "<persisted-output>\n"
+        f"Full output saved to: {rel_path}\n"
+        "Preview:\n"
+        f"{preview}\n"
+        "</persisted-output>"
+    )
+
+
+def micro_compact(messages: list) -> list:
+    """当工具调用次数大于一定阈值的时候 直接硬编码来压缩工具调用结果"""
+
+    def _collect_tool_result_blocks(messages: list) -> list[tuple[int, int, dict]]:
+        """把工具调用的结果块收集出来"""
+        blocks = []
+        for message_index, message in enumerate(messages):
+            content = message.get("content")
+            if message.get("role") != "user" or not isinstance(content, list):
+                continue
+            for block_index, block in enumerate(content):
+                if isinstance(block, dict) and block.get("type") == "tool_result":
+                    blocks.append((message_index, block_index, block))
+        return blocks
+
+    tool_results = _collect_tool_result_blocks(messages)
+    # 工具调用结果数小于阈值不压缩
+    if len(tool_results) <= KEEP_RECENT_TOOL_RESULTS:
+        return messages
+    # 工具调用结果数大于阈值 直接重写久远的工具调用结果
+    for _, _, block in tool_results[:-KEEP_RECENT_TOOL_RESULTS]:
+        content = block.get("content", "")
+        if not isinstance(content, str) or len(content) <= 120:
+            continue
+        block["content"] = "[Earlier tool result compacted. Re-run the tool if you need full detail.]"
+    return messages
+
+
+def compact_history(messages: list, state: CompactState, focus: str | None = None) -> list:
+    """用大模型来压缩历史会话"""
+
+    def _write_transcript(messages: list) -> Path:
+        """把完整记录持久化到文件里"""
+        TRANSCRIPT_DIR.mkdir(parents=True, exist_ok=True)
+        path = TRANSCRIPT_DIR / f"transcript_{int(time.time())}.jsonl"
+        with path.open("w", encoding="utf-8") as handle:
+            for message in messages:
+                handle.write(json.dumps(message, default=str, ensure_ascii=False) + "\n")
+        return path
+
+    def _summarize_history(messages: list) -> str:
+        conversation = json.dumps(messages, default=str)[:80000]
+        prompt = (
+            "Summarize this coding-agent conversation so work can continue.\n"
+            "Preserve:\n"
+            "1. The current goal\n"
+            "2. Important findings and decisions\n"
+            "3. Files read or changed\n"
+            "4. Remaining work\n"
+            "5. User constraints and preferences\n"
+            "Be compact but concrete.\n\n"
+            f"{conversation}"
+        )
+        response = client.messages.create(
+            model=MODEL,
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=2000,
+        )
+        text = "".join(b.text for b in response.content if hasattr(b, "text"))
+        return text.strip()
+
+    transcript_path = _write_transcript(messages)
+    logger.info("[compact] 转录已保存: {}", transcript_path)
+    display.tool("compact", {"transcript": str(transcript_path.name)})
+
+    summary = _summarize_history(messages)
+    if focus:
+        summary += f"\n\nFocus to preserve next: {focus}"
+    if state.recent_files:
+        recent_lines = "\n".join(f"- {path}" for path in state.recent_files)
+        summary += f"\n\nRecent files to reopen if needed:\n{recent_lines}"
+
+    state.has_compacted = True
+    state.last_summary = summary
+    logger.info("[compact] 压缩完成，摘要 {} 字符", len(summary))
+
+    return [{
+        "role": "user",
+        "content": (
+            "This conversation was compacted so the agent can continue working.\n\n"
+            f"{summary}"
+        ),
+    }]
+
+
+TOOL_HANDLERS = {
+    "compact": lambda **kw: "Compacting conversation...",
+}
+
+TOOLS = [
+    {
+        "name": "compact",
+        "description": "Summarize earlier conversation so work can continue in a smaller context.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "focus": {
+                    "type": "string",
+                    "description": "Optional focus hint to preserve in the summary.",
+                },
+            },
+        },
+    },
+]

@@ -1,0 +1,32 @@
+{
+  "compact_enable": true,
+  "plan_enable": true,
+  "subagent_enable": true,
+  "hooks": {
+    "SessionStart": [
+      {
+        "command": "echo '{\"additionalContext\": \"Session started. Workspace: '\"$PWD\"'\"}'"
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "bash",
+        "command": "echo '{\"additionalContext\": \"PreToolUse: about to run bash\"}'"
+      },
+      {
+        "matcher": "write_file",
+        "command": "echo '{\"additionalContext\": \"PreToolUse: about to write a file\"}'"
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "write_file",
+        "command": "echo '{\"additionalContext\": \"PostToolUse: file written successfully\"}'"
+      },
+      {
+        "matcher": "read_file",
+        "command": "echo '{\"additionalContext\": \"PostToolUse: file read complete\"}'"
+      }
+    ]
+  }
+}
