@@ -1,5 +1,6 @@
 .idea/
 __pycache__/
-/5-Agent开发/5-1-ClaudeCode源码/codes/.env
-/5-Agent开发/5-1-ClaudeCode源码/codes/app.log
-/5-Agent开发/5-1-ClaudeCode源码/codes/第06章 上下文压缩/.transcripts/
+/5-Agent开发/5-1-ClaudeCode源码/old_codes/.env
+/5-Agent开发/5-1-ClaudeCode源码/old_codes/app.log
+/5-Agent开发/5-1-ClaudeCode源码/old_codes/第06章 上下文压缩/.transcripts/
+/5-Agent开发/5-1-ClaudeCode源码/latest_codes/.env
