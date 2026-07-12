@@ -1,0 +1,7 @@
+{
+  "cdp-bridge": {
+      "type": "local",
+      "command": ["uv", "run", "--directory", "/Users/unagi/Desktop/project/cdp-bridge", "cdp-bridge"],
+      "enabled": true
+  }
+}
