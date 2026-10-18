@@ -83,8 +83,8 @@ class DatasetLoader:
         if dataset_name == "sh0416___ag_news":
             train_records = self._read_jsonl(self.dataset_dir / dataset_name / "train.jsonl")
             test_records = self._read_jsonl(self.dataset_dir / dataset_name / "test.jsonl")
-            train_pairs = [(f"{x['title']} {x['description']}", int(x["label"]) - 1) for x in train_records]
-            test_pairs = [(f"{x['title']} {x['description']}", int(x["label"]) - 1) for x in test_records]
+            train_pairs = [(f"{x['title']}", int(x["label"]) - 1) for x in train_records]
+            test_pairs = [(f"{x['title']}", int(x["label"]) - 1) for x in test_records]
             return train_pairs, test_pairs
 
         if dataset_name == "stanfordnlp___imdb":
