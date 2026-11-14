@@ -23,7 +23,7 @@ def evaluate(model, enc, predict, samples, batch_size=64):
 
 
 def train(model, enc, predict, data, device, save_path, epochs, batch, lr, eval_steps, patience, log_dir=None):
-    """通用训练循环。enc(texts, labels) 已把 labels 放进 batch，故 loss 统一从 model(**batch).loss 取。"""
+    """通用训练循环；返回验证集 macro-F1 最佳 checkpoint 对应的 step。"""
     from collections import deque
     from torch.utils.tensorboard import SummaryWriter
 
@@ -34,6 +34,7 @@ def train(model, enc, predict, data, device, save_path, epochs, batch, lr, eval_
     opt = torch.optim.AdamW((p for p in model.parameters() if p.requires_grad), lr)
 
     best_f1, patience_left, step = -1.0, patience, 0
+    best_step = 0
     model.train()
     for epoch in range(epochs):
         perm = torch.randperm(len(x_train))
@@ -51,7 +52,8 @@ def train(model, enc, predict, data, device, save_path, epochs, batch, lr, eval_
             if writer:
                 writer.add_scalar("train/loss", current_loss, step)
                 writer.add_scalar("train/loss_smooth", sum(recent_losses) / len(recent_losses), step)
-            if step % eval_steps == 0:
+            is_last_step = epoch == epochs - 1 and i + batch >= len(x_train)
+            if step % eval_steps == 0 or is_last_step:
                 val = evaluate(model, enc, predict, data["eval"], 128)
                 improved = val["macro_f1"] > best_f1
                 print(f"step {step}  train_loss {current_loss:.4f}  val_loss {val['loss']:.4f}  val_acc {val['accuracy']:.4f}  val_f1 {val['macro_f1']:.4f}{' *' if improved else ''}")
@@ -61,6 +63,7 @@ def train(model, enc, predict, data, device, save_path, epochs, batch, lr, eval_
                     writer.add_scalar("val/macro_f1", val["macro_f1"], step)
                 if improved:
                     best_f1, patience_left = val["macro_f1"], patience
+                    best_step = step
                     save_path.parent.mkdir(parents=True, exist_ok=True)
                     torch.save(model.state_dict(), save_path)
                     print(f"saved checkpoint -> {save_path}")
@@ -75,6 +78,10 @@ def train(model, enc, predict, data, device, save_path, epochs, batch, lr, eval_
 
     if writer:
         writer.close()
+    if best_step == 0:
+        raise RuntimeError("未产生有效的最佳 checkpoint，请检查训练数据、epochs 和验证结果。")
+    print(f"best val_f1 {best_f1:.4f}  best_step {best_step}")
+    return best_step
 
 
 def run(cfg, model_name, build):
@@ -97,43 +104,61 @@ def run(cfg, model_name, build):
     base = Path(__file__).resolve().parent
     save_path = base / "checkpoints" / f"{model_name}_{cfg['dataset']}_best.pt"
     log_dir = base / "runs" / f"{model_name}_{cfg['dataset']}_{datetime.now():%m%d_%H%M%S}"
-    train(model, enc, predict, data, device, save_path,
-          cfg["epochs"], cfg["batch"], cfg["lr"], cfg["eval_steps"], cfg["patience"], str(log_dir))
+    best_step = train(model, enc, predict, data, device, save_path,
+                      cfg["epochs"], cfg["batch"], cfg["lr"], cfg["eval_steps"], cfg["patience"], str(log_dir))
 
     model.load_state_dict(torch.load(save_path))
     test_metrics = evaluate(model, enc, predict, data["test"])
     print(test_metrics)
 
-    save_results(cfg, model_name, log_dir.name, test_metrics)
+    save_results(cfg, model_name, log_dir.name, test_metrics, best_step)
 
 
-def save_results(cfg, model_name, runs_dir, metrics):
-    """把实验参数、runs 目录名、测试集效果追加写入 results.csv。"""
+def save_results(cfg, model_name, runs_dir, metrics, best_step):
+    """记录全部 cfg、最佳 step 和测试指标；新增配置自动扩列，保留历史记录。"""
     import csv
+    import json
     from pathlib import Path
+    from tempfile import NamedTemporaryFile
 
     csv_path = Path(__file__).resolve().parent / "results.csv"
-    fields = ["model", "dataset", "lr", "batch", "max_len", "epochs", "freeze",
-              "runs_dir", "test_loss", "test_acc", "test_f1"]
     row = {
         "model": model_name,
-        "dataset": cfg["dataset"],
-        "lr": cfg["lr"],
-        "batch": cfg["batch"],
-        "max_len": cfg["max_len"],
-        "epochs": cfg["epochs"],
-        "freeze": cfg.get("freeze", False),
         "runs_dir": runs_dir,
+        "best_step": best_step,
         "test_loss": f"{metrics['loss']:.4f}",
         "test_acc": f"{metrics['accuracy']:.4f}",
         "test_f1": f"{metrics['macro_f1']:.4f}",
     }
-    new_file = not csv_path.exists() or csv_path.stat().st_size == 0
-    with open(csv_path, "a", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=fields)
-        if new_file:
+    # 配置与结果字段重名时加 cfg_ 前缀，避免丢失任一值。
+    used_fields = set(row) | set(cfg)
+    for key, value in cfg.items():
+        column = key
+        if column in row:
+            column = f"cfg_{column}"
+            while column in used_fields:
+                column = f"cfg_{column}"
+        used_fields.add(column)
+        row[column] = json.dumps(value, ensure_ascii=False, default=str) if isinstance(value, (dict, list, tuple)) or value is None else value
+
+    old_fields, old_rows = [], []
+    if csv_path.exists() and csv_path.stat().st_size:
+        with open(csv_path, newline="", encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            old_fields, old_rows = reader.fieldnames or [], list(reader)
+    fields = list(dict.fromkeys([*old_fields, *row]))
+    temp_path = None
+    try:
+        with NamedTemporaryFile("w", newline="", encoding="utf-8", dir=csv_path.parent, delete=False) as f:
+            temp_path = Path(f.name)
+            writer = csv.DictWriter(f, fieldnames=fields)
             writer.writeheader()
-        writer.writerow(row)
+            writer.writerows(old_rows)
+            writer.writerow(row)
+        temp_path.replace(csv_path)
+    finally:
+        if temp_path is not None:
+            temp_path.unlink(missing_ok=True)
     print(f"已写入实验记录 -> {csv_path}")
 
 
