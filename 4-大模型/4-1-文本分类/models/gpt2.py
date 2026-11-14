@@ -5,7 +5,6 @@ from .common import classifier_build
 MODEL_DIR = Path(__file__).resolve().parents[2] / "pre_training_models" / "gpt2"
 
 DEFAULT_CFG = dict(
-    max_len=32,    # GPT2 无双向注意力，标题类短文本可适当放宽
     epochs=3,
     batch=32,
     lr=5e-6,

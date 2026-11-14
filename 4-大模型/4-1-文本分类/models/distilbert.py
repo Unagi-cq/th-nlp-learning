@@ -5,7 +5,6 @@ from .common import classifier_build
 MODEL_DIR = Path(__file__).resolve().parents[2] / "pre_training_models" / "distilbert-base-uncased"
 
 DEFAULT_CFG = dict(
-    max_len=32,
     epochs=3,
     batch=32,
     lr=5e-6,

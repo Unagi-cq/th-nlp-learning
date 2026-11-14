@@ -165,8 +165,9 @@ def save_results(cfg, model_name, runs_dir, metrics, best_step):
 if __name__ == "__main__":
     """
     用法：
-        1. 选模型：改 model（"bert" / "gpt2" / "distilbert"）。
+        1. 选模型：改 model（"bert" / "gpt2" / "distilbert" / "roberta"）。
         2. 选数据集：改 dataset（"sh0416___ag_news" / "stanfordnlp___imdb"）。
+           max_len 随数据集自动设置：AG News 为 32，IMDb 为 256，所有模型共用。
         3. 训练：  python train.py
            模型脚本在 models/ 下，各自定义 DEFAULT_CFG 和 build，特殊设置通过 configure 定制。
         4. 可视化：训练会往 runs/{model}_{dataset}_{时间戳}/ 写 TensorBoard 日志，
@@ -179,17 +180,22 @@ if __name__ == "__main__":
         val/accuracy       每个 eval_steps 的验证集准确率
         val/macro_f1       每个 eval_steps 的验证集 macro-F1
     """
-    from models import bert, distilbert, gpt2
+    from models import bert, distilbert, gpt2, roberta
 
     MODELS = {
         "bert": (bert.DEFAULT_CFG, bert.build),
         "gpt2": (gpt2.DEFAULT_CFG, gpt2.build),
         "distilbert": (distilbert.DEFAULT_CFG, distilbert.build),
+        "roberta": (roberta.DEFAULT_CFG, roberta.build),
+    }
+    MAX_LEN_BY_DATASET = {
+        "sh0416___ag_news": 32,
+        "stanfordnlp___imdb": 256,
     }
 
     model = "bert"
     dataset = "sh0416___ag_news"  # 或 "stanfordnlp___imdb"
 
     default_cfg, build = MODELS[model]
-    cfg = {**default_cfg, "dataset": dataset}
+    cfg = {**default_cfg, "dataset": dataset, "max_len": MAX_LEN_BY_DATASET[dataset]}
     run(cfg, model, build)

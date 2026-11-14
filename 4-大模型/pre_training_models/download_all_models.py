@@ -4,11 +4,11 @@ from modelscope import snapshot_download
 
 OUT_DIR = Path(__file__).resolve().parent
 
-# 换成 t5-small / distilgpt2 会更快、更省显存，适合先在 MPS 上试跑
+# 模型保存目录需与 models/ 下各模型文件的 MODEL_DIR 对应。
 MODELS = {
     "bert-base-uncased": "AI-ModelScope/bert-base-uncased",
     "distilbert-base-uncased": "AI-ModelScope/distilbert-base-uncased",
-    "t5-base": "AI-ModelScope/t5-base",
+    "roberta-base": "AI-ModelScope/roberta-base",
     "gpt2": "AI-ModelScope/gpt2",
 }
 
